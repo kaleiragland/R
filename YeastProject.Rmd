@@ -1,0 +1,108 @@
+---
+title: "YeastProject"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+opts_chunk$set(fig.align="center", fig.height=4, fig.width=4)
+# Do not alter anything above this chunk
+
+#Your code goes here:
+library(tidyverse)
+library(ggplot2)
+library(seqinr)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+# Read in the gzipped compressed fasta file
+Yeast_Fasta <- read.fasta("orf_coding.fasta (1).gz")
+
+#Get the gene names from the fasta object
+yeast_names <- getName(Yeast_Fasta)
+#Get the GC content from the fasta object
+yeast_gc <- c()
+for (i in Yeast_Fasta) {yeast_gc <- c(yeast_gc, GC(i))}
+#Combine the names and GC content into a dataframe
+yeast_genes_df <- data.frame(yeast_names, yeast_gc)
+
+
+#Import the sorting files
+heatact <- read.csv("Yeast_Heat_Activated_Genes (1).txt", sep = "\t")
+heatrep <- read.csv("Yeast_Heat_Repressed_Genes (1).txt", sep = "\t")
+
+#Make a new column to hold the Heat Response annotation
+#Make the default no change in gene expression.
+yeast_genes_df <- mutate(yeast_genes_df, Heat_Response = "No_Change")
+
+#Add annotations for the genes that have increased gene expression during heatshock.
+yeast_genes_df$Heat_Response <-ifelse(yeast_genes_df$yeast_names %in% heatact$Activated.Genes, "Activated", yeast_genes_df$Heat_Response)
+
+#Add annotations for the genes that have decreased gene expression during heatshock.
+yeast_genes_df$Heat_Response <-ifelse(yeast_genes_df$yeast_names %in% heatrep$Repressed.Genes, "Repressed", yeast_genes_df$Heat_Response)
+
+#Create vectors to subset GC content of genes based on Heat Response
+activatedgc <- yeast_genes_df[yeast_genes_df$Heat_Response == "Activated", ]
+repressedgc <- yeast_genes_df[yeast_genes_df$Heat_Response == "Repressed", ]
+nochangegc <- yeast_genes_df[yeast_genes_df$Heat_Response == "No_Change", ]
+
+#Visualizing data between Activated, Repressed, and No Change groups using a boxplot
+boxplot(activatedgc$yeast_gc, repressedgc$yeast_gc, nochangegc$yeast_gc, main= "GC Content and Heat Response", col= (c("seagreen3","tomato", "seashell3")), xlab = "Heat Response", ylab = "GC Content (%)", names= c("Activated", "Repressed", "No Change"), cex.axis = 0.9)
+
+#Visualizing data between Activated and Repressed groups using a boxplot
+boxplot(activatedgc$yeast_gc, repressedgc$yeast_gc, main= "GC Content and Heat Response of Yeast Genes", xlab= "Heat Response", ylab= "GC Content (%)", names= c("Activated", "Repressed"), col=c('seagreen3', 'tomato'), cex.main = 0.8, cex.axis = 0.9)
+
+#Checking for normality
+qqnorm(activatedgc$yeast_gc, main= "QQ Plot of GC Content of Heat Activated Genes", cex.main = 0.8)
+qqline(activatedgc$yeast_gc, col= "red")
+
+#Finding median and IQR of both groups to assess variance
+fivenum(activatedgc$yeast_gc)
+
+fivenum(repressedgc$yeast_gc)
+
+#Running a 2 sample independent t-test for the two groups
+t.test(activatedgc$yeast_gc, repressedgc$yeast_gc, alternative = "two.sided", var.equal = TRUE)
+
+#Running an ANOVA test to determine if there are significant differences between heat response groups
+anovatest <- aov(yeast_genes_df$yeast_gc~yeast_genes_df$Heat_Response)
+summary(anovatest)
+
+#Comparing mean differences between groups
+TukeyHSD(anovatest)
+
+#heatmap for GC content of heat response genes
+actData <- subset(activatedgc, select = c(2))
+heatActivated <- as.matrix(actData)
+heatmap(cbind(heatActivated,heatActivated), scale="none", labRow = "", labCol = "", ylab = "Sample Genes", xlab = "Heat Activated", main = "Hierarchically Clustered")
+
+repData <- subset(repressedgc, select = c(2))
+heatRepressed <- as.matrix(repData)
+heatmap(cbind(heatRepressed,heatRepressed), scale="none", ylab = "Sample Genes", labRow = "", labCol = "", xlab = "Heat Repressed", main = "Hierarchically Clustered")
+
+notreatmentcounts <- read.delim("WT_Heatshock_T0_counts (1).txt")
+heatshockcounts <- read.delim("WT_Heatshock_T30_counts.txt")
+#Adding gene length column for both datasets
+notreatmentcounts <- transform(notreatmentcounts, Gene_Length = Gene_Stop-Gene_Start)
+heatshockcounts <- transform(heatshockcounts, Gene_Length = Gene_Stop-Gene_Start)
+#Adding gene length normalized column to both datasets
+notreatmentcounts <- transform(notreatmentcounts, Gene_Length_Normalized = Count/Gene_Length)
+heatshockcounts <- transform(heatshockcounts, Gene_Length_Normalized = Count/Gene_Length)
+
+#Adding normalized counts
+notreatmentcounts <- transform(notreatmentcounts, Normalized_Counts = (Gene_Length_Normalized/sum(notreatmentcounts$Gene_Length_Normalized)))
+                               sum(notreatmentcounts$Normalized_Counts)
+
+```
+
+
+
+
