@@ -1,0 +1,118 @@
+---
+title: "BCH339N Machine Learning Project"
+author: "Filina Nurcahya-Tjoa, Kalei Ragland"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library('randomForest')
+library('caret')
+library('ggfortify')
+library('tidyverse')
+library('rpart.plot')
+library('naivebayes')
+library('ggplot2')
+library('GGally')
+```
+
+Loading and Preparing the Data
+
+```{r}
+set.seed(101)
+
+testing <- read.csv('testing.csv')
+testingvariables <- testing[,c(1:132)]
+training <- read.csv('training.csv')
+training <- training[,-134]
+trainingvariables <- training[,c(1:132)]
+
+choices <- colnames(training) %>% str_replace_all('_|\\.|[0-9]', ' ') %>% 
+    str_to_title()
+choices_01 <- colnames(training[,c(1:132)]) %>% str_replace_all('_|\\.|[0-9]', ' ') %>% str_to_title()
+
+colnames(testing) <- choices
+colnames(training) <- choices
+
+colnames(testingvariables) <- choices_01
+colnames(trainingvariables) <- choices_01
+```
+
+
+```{r}
+unique(training$Prognosis)
+```
+
+Explanatory Analysis : Correlation
+
+```{r}
+correlation <- data.frame()
+for(i in seq(ncol(testingvariables))){
+  sample_1 <- testingvariables[, i]
+  sample_1 <- apply(testingvariables, 2, function(x){sum(x == sample_1)/length(sample_1)})
+  correlation <- rbind(correlation, sample_1)
+}
+colnames(correlation) <- colnames(testingvariables)
+rownames(correlation) <- colnames(testingvariables)
+correlation <- as.matrix(correlation)
+heatmap(correlation)
+
+testingvariables %>% ggcorr(high       = "#20a486ff",
+                                   low        = "#fde725ff",
+                                   label      = FALSE, 
+                                   hjust      = .75, 
+                                   size       = .7, 
+                                   label_size = 3,
+                                   nbreaks    = 5
+) +
+    labs(title = "Correlation Matrix",
+         subtitle = "Pearson Method Using Pairwise Obervations")
+```
+
+PCA - We are going to subset a small group of conditions from the training data and try to see if they would cluster together (doing the whole training data set would lead to too many variables)
+
+```{r}
+PCA_subset <- training
+
+pca1 <- prcomp(PCA_subset[,c(1:132)])
+
+summary(pca1)
+pca_var <-pca1$sdev^2
+pca_var_per <-round(pca_var/sum(pca_var)*100, 1)
+barplot(pca_var_per, main = "Scree Plot", xlab = "Principal Component", ylab = "Percent Variation",  cex.names = 0.3)
+axis(side=1, at=1:length(training), labels=paste0("PC", 1:133), las=2, cex.axis = 0.3)
+
+pca_graph <- autoplot(pca1, data = PCA_subset, colour = 'Prognosis', main = "PCA Graph")
+pca_graph
+```
+
+Naive Bayes
+
+```{r}
+NaiveBayes <- naive_bayes(as.factor(Prognosis) ~ ., data = training, method = 'class')
+Predictions <- predict(NaiveBayes, newdata = testingvariables)
+ConfusionMatrix <- table(testing$Prognosis, Predictions)
+naiveResults <- confusionMatrix(ConfusionMatrix)
+
+```
+
+Random Forest 
+
+```{r}
+names(training) <- make.names(names(training))
+names(testingvariables) <- make.names(names(testingvariables))
+RandomForest <- randomForest(as.factor(Prognosis) ~ ., data = training, method = 'class')
+Predictions2 <- predict(RandomForest, newdata = testingvariables)
+ConfusionMatrix2 <- table(testing$Prognosis, Predictions2)
+confusionMatrix(ConfusionMatrix2)
+
+RandomForest1 <- randomForest(as.factor(Prognosis) ~ ., data = training, method = 'class')
+
+
+#save(RandomForest, file = "RandomForestModel.Rdata")
+
+```
+
+
+
